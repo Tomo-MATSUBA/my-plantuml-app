@@ -66,7 +66,7 @@ def encode_plantuml(text: str) -> str:
     return out
 
 def plantuml_url(code: str, fmt: str = "png") -> str:
-    return f"https://www.plantuml.com/plantuml/{fmt}/{encode_plantuml(code)}"
+    return f"https://www.plantuml.com/plantuml/{fmt}/~1{encode_plantuml(code)}"
 
 # ─────────────────────────────────────────────────────────────
 # テンプレート
