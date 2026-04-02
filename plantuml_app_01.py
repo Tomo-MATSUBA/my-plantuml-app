@@ -1,11 +1,9 @@
 """
-PlantUML Generator - Streamlit Web版
-左カラム: コードエディタ / 右カラム: プレビュー
+PlantUML Generator - Streamlit Web版 with Ace Vim Editor
+左カラム: Ace Editor (Vim モード) / 右カラム: プレビュー
 
 必要なもの:
-  pip install streamlit pillow requests
-  plantuml.jar（ローカルレンダリング用、省略可）
-  Java（plantuml.jar を使う場合）
+  pip install streamlit pillow requests streamlit-ace
 
 起動方法:
   streamlit run plantuml_app.py
@@ -18,8 +16,13 @@ import zlib
 import tempfile
 import shutil
 import sys
-import base64
 from pathlib import Path
+
+try:
+    from streamlit_ace import st_ace
+    HAS_ACE = True
+except ImportError:
+    HAS_ACE = False
 
 try:
     from PIL import Image
@@ -35,7 +38,7 @@ except ImportError:
     HAS_REQUESTS = False
 
 # ─────────────────────────────────────────────────────────────
-# PlantUML URL エンコード（plantuml.com サーバー利用時）
+# PlantUML URL エンコード
 # ─────────────────────────────────────────────────────────────
 def _e6(b):
     if b < 10: return chr(48 + b)
@@ -296,7 +299,7 @@ Project starts 2025-04-01
 # ─────────────────────────────────────────────────────────────
 JAR_NAME = "plantuml.jar"
 
-def find_jar() -> str | None:
+def find_jar():
     candidates = [
         Path(__file__).parent / JAR_NAME,
         Path.cwd() / JAR_NAME,
@@ -307,12 +310,12 @@ def find_jar() -> str | None:
             return str(p)
     return None
 
-def java_cmd() -> str:
+def java_cmd():
     if sys.platform.startswith("win"):
         return shutil.which("javaw") or "javaw"
     return shutil.which("java") or "java"
 
-def subprocess_kwargs() -> dict:
+def subprocess_kwargs():
     if not sys.platform.startswith("win"):
         return {}
     try:
@@ -330,8 +333,7 @@ def subprocess_kwargs() -> dict:
 # ─────────────────────────────────────────────────────────────
 # レンダリング
 # ─────────────────────────────────────────────────────────────
-def render_local(code: str, jar_path: str, fmt: str = "png") -> bytes | None:
-    """plantuml.jar でローカルレンダリング → bytes"""
+def render_local(code, jar_path, fmt="png"):
     tmp = tempfile.mkdtemp(prefix="plantuml_st_")
     try:
         puml = os.path.join(tmp, "diagram.puml")
@@ -352,8 +354,7 @@ def render_local(code: str, jar_path: str, fmt: str = "png") -> bytes | None:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-def render_remote(code: str, fmt: str = "png") -> bytes | None:
-    """plantuml.com サーバーでレンダリング → bytes"""
+def render_remote(code, fmt="png"):
     if not HAS_REQUESTS:
         return None
     try:
@@ -365,8 +366,7 @@ def render_remote(code: str, fmt: str = "png") -> bytes | None:
     except Exception:
         return None
 
-def get_diagram(code: str, fmt: str = "png") -> tuple[bytes | None, str]:
-    """ローカル優先でレンダリング。返り値: (bytes, source)"""
+def get_diagram(code, fmt="png"):
     jar = find_jar()
     if jar:
         data = render_local(code, jar, fmt)
@@ -387,71 +387,35 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ── CSS カスタマイズ ──────────────────────────────────────────
 st.markdown("""
 <style>
-/* ベース */
 html, body, [data-testid="stAppViewContainer"] {
     background: #0d1117;
     color: #e6edf3;
     font-family: 'Segoe UI', system-ui, sans-serif;
 }
-
-/* ヘッダー非表示 */
 [data-testid="stHeader"] { display: none; }
-
-/* サイドバー */
 [data-testid="stSidebar"] { background: #161b22; border-right: 1px solid #30363d; }
-
-/* テキストエリア */
-textarea {
-    background: #0d1117 !important;
-    color: #e6edf3 !important;
-    font-family: 'Courier New', monospace !important;
-    font-size: 13px !important;
-    border: 1px solid #30363d !important;
-    border-radius: 6px !important;
-}
-textarea:focus { border-color: #58a6ff !important; box-shadow: 0 0 0 2px rgba(88,166,255,0.15) !important; }
-
-/* selectbox */
 [data-testid="stSelectbox"] > div > div {
     background: #161b22 !important;
     border: 1px solid #30363d !important;
     color: #e6edf3 !important;
 }
-
-/* ボタン */
 button[kind="primary"] {
     background: #238636 !important;
     border: none !important;
     color: white !important;
 }
 button[kind="primary"]:hover { background: #2ea043 !important; }
-
-/* info/success/error ボックス */
-[data-testid="stAlert"] { border-radius: 6px; }
-
-/* 画像 */
 [data-testid="stImage"] img { border-radius: 8px; max-width: 100%; }
-
-/* コード */
 code { background: #161b22 !important; color: #58a6ff !important; }
-
-/* ダウンロードボタン */
 [data-testid="stDownloadButton"] button {
     background: #1f6feb !important;
     color: white !important;
     border: none !important;
 }
-
-/* セパレータ */
 hr { border-color: #30363d !important; }
-
-/* column ギャップ調整 */
 [data-testid="stHorizontalBlock"] { gap: 1rem; }
-
-/* カスタムヘッダー */
 .app-header {
     background: linear-gradient(90deg, #161b22, #0d1117);
     border-bottom: 1px solid #30363d;
@@ -470,11 +434,7 @@ hr { border-color: #30363d !important; }
     border-radius: 12px;
     font-weight: bold;
 }
-.render-source {
-    font-size: 0.75rem;
-    color: #8b949e;
-    margin-top: 4px;
-}
+.render-source { font-size: 0.75rem; color: #8b949e; margin-top: 4px; }
 .info-bar {
     background: #161b22;
     border: 1px solid #30363d;
@@ -484,44 +444,52 @@ hr { border-color: #30363d !important; }
     color: #8b949e;
     margin-bottom: 8px;
 }
+.vim-hint {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    color: #8b949e;
+    font-family: 'Courier New', monospace;
+    margin-top: 6px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ── ヘッダー ──────────────────────────────────────────────────
+# ヘッダー
 jar_status = "✅ jar検出" if find_jar() else "🌐 クラウドモード"
 jar_color  = "#3fb950" if find_jar() else "#e3b341"
-
 st.markdown(f"""
 <div class="app-header">
   <span style="font-size:1.8rem">📐</span>
   <h1>PlantUML Generator</h1>
-  <span class="badge">Web版</span>
+  <span class="badge">Vim Editor</span>
   <span style="margin-left:auto; font-size:0.8rem; color:{jar_color};">{jar_status}</span>
 </div>
 """, unsafe_allow_html=True)
 
-# ── セッション初期化 ──────────────────────────────────────────
+# セッション初期化
 if "code" not in st.session_state:
     st.session_state.code = TEMPLATES["シーケンス図"]
 if "selected_tpl" not in st.session_state:
     st.session_state.selected_tpl = "シーケンス図"
 if "auto_preview" not in st.session_state:
     st.session_state.auto_preview = True
-if "editor_version" not in st.session_state:
-    # text_area の key にバージョンを付与して強制再描画するためのカウンタ
-    st.session_state.editor_version = 0
+if "ace_key" not in st.session_state:
+    # st_ace の key を変えることでテンプレート変更時に強制再マウント
+    st.session_state.ace_key = 0
 
-# ── サイドバー ────────────────────────────────────────────────
+# サイドバー
 with st.sidebar:
     st.markdown("### ⚙️ 設定")
     st.session_state.auto_preview = st.toggle(
-        "自動プレビュー（コード変更後に更新）",
+        "自動プレビュー",
         value=st.session_state.auto_preview
     )
 
     st.markdown("---")
     st.markdown("### 📁 ファイル")
-
     uploaded = st.file_uploader(
         ".puml / .txt ファイルを開く",
         type=["puml", "plantuml", "txt"],
@@ -530,32 +498,37 @@ with st.sidebar:
     if uploaded:
         content = uploaded.read().decode("utf-8")
         st.session_state.code = content
+        st.session_state.ace_key += 1
         st.success(f"📂 {uploaded.name} を読み込みました")
 
     st.markdown("---")
-    st.markdown("### 💡 使い方")
+    st.markdown("### ⌨️ Vim キーバインド")
     st.markdown("""
-1. **テンプレート**を選ぶか直接コードを編集
-2. **▶ プレビュー更新**でダイアグラムを生成
-3. PNG / SVG でダウンロード
-
-**レンダリング方式**
-- `plantuml.jar` があればローカル処理
-- なければ [plantuml.com](https://plantuml.com) を使用
+| キー | 動作 |
+|------|------|
+| `i` | Insert モードへ |
+| `Esc` | Normal モードへ |
+| `v` / `V` | Visual / 行 Visual |
+| `dd` | 行削除 |
+| `yy` / `p` | コピー / ペースト |
+| `u` / `Ctrl+r` | Undo / Redo |
+| `gg` / `G` | 先頭 / 末尾 |
+| `/` | 検索 |
+| `:%s/a/b/g` | 一括置換 |
+| `Ctrl+Enter` | プレビューへ反映 |
 """)
 
     st.markdown("---")
     st.markdown("### 🔗 リンク")
     st.markdown("[PlantUML 公式](https://plantuml.com/ja/)  |  [ドキュメント](https://plantuml.com/ja/sequence-diagram)")
 
-# ── メインレイアウト ──────────────────────────────────────────
+# メインレイアウト
 col_left, col_right = st.columns([1, 1], gap="medium")
 
 # ════════════════════════════════════════════════════════════
-# 左カラム: エディタ
+# 左カラム: Ace Vim エディタ
 # ════════════════════════════════════════════════════════════
 with col_left:
-    # テンプレート選択
     tpl_col, btn_col = st.columns([3, 1])
     with tpl_col:
         tpl_names = list(TEMPLATES.keys())
@@ -569,26 +542,53 @@ with col_left:
         if st.button("📋 読み込み", use_container_width=True):
             st.session_state.code = TEMPLATES[new_tpl]
             st.session_state.selected_tpl = new_tpl
-            # key を変えることで text_area を強制再描画し value を反映させる
-            st.session_state.editor_version += 1
+            # ace_key を変えると st_ace が新しい value で再マウントされる
+            st.session_state.ace_key += 1
             st.rerun()
 
-    # コードエディタ
-    # key にバージョンを含めることで、テンプレート読み込み時に必ず value が反映される
-    code_input = st.text_area(
-        "PlantUML コード",
-        value=st.session_state.code,
-        height=480,
-        label_visibility="collapsed",
-        key=f"code_editor_{st.session_state.editor_version}",
-        placeholder="@startuml\n\n' ここにコードを書く\n\n@enduml",
-    )
+    if HAS_ACE:
+        # ── Ace Editor (Vim モード) ──────────────────────────────
+        edited_code = st_ace(
+            value=st.session_state.code,
+            language="text",           # PlantUML 専用ハイライトはないので plain text
+            theme="tomorrow_night",    # 暗いテーマ（他: dracula, monokai, nord_dark）
+            keybinding="vim",          # ← Vim キーバインド
+            font_size=13,
+            tab_size=2,
+            min_lines=25,
+            max_lines=35,
+            show_gutter=True,
+            show_print_margin=False,
+            auto_update=False,         # False = Ctrl+Enter で Streamlit へ送信
+            key=f"ace_{st.session_state.ace_key}",
+        )
+        # st_ace は None を返すことがあるので guard する
+        if edited_code is not None:
+            st.session_state.code = edited_code
 
-    # ユーザーが手動編集した内容を session_state に反映
-    if code_input != st.session_state.code:
-        st.session_state.code = code_input
+        st.markdown(
+            '<div class="vim-hint">'
+            '⌨️ <b>i</b>=Insert &nbsp; <b>Esc</b>=Normal &nbsp; '
+            '<b>dd</b>=行削除 &nbsp; <b>yy/p</b>=コピペ &nbsp; '
+            '<b>u</b>=Undo &nbsp; <b>/</b>=検索 &nbsp; '
+            '<b>Ctrl+Enter</b>=プレビューへ反映'
+            '</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        # フォールバック: streamlit-ace が入っていない場合は通常のテキストエリア
+        st.error("⚠️ `pip install streamlit-ace` を実行してください。通常エディタで表示中。")
+        edited_code = st.text_area(
+            "PlantUML コード",
+            value=st.session_state.code,
+            height=480,
+            label_visibility="collapsed",
+            key=f"code_fallback_{st.session_state.ace_key}",
+        )
+        if edited_code != st.session_state.code:
+            st.session_state.code = edited_code
 
-    # 情報バー
+    # ステータス
     lines = st.session_state.code.count("\n") + 1
     chars = len(st.session_state.code)
     st.markdown(
@@ -596,7 +596,6 @@ with col_left:
         unsafe_allow_html=True
     )
 
-    # ファイル保存
     st.download_button(
         "💾 .puml ファイルとして保存",
         data=st.session_state.code.encode("utf-8"),
@@ -615,7 +614,6 @@ with col_right:
     with refresh_btn:
         do_preview = st.button("▶ 更新", type="primary", use_container_width=True)
 
-    # 自動プレビュー or 手動更新
     should_render = do_preview or st.session_state.auto_preview
 
     if should_render and st.session_state.code.strip():
@@ -634,10 +632,8 @@ with col_right:
                 unsafe_allow_html=True
             )
 
-            # ── ダウンロードセクション ──────────────────────
             st.markdown("---")
             dl_col1, dl_col2 = st.columns(2)
-
             with dl_col1:
                 st.download_button(
                     "🖼 PNG ダウンロード",
@@ -646,9 +642,8 @@ with col_right:
                     mime="image/png",
                     use_container_width=True,
                 )
-
             with dl_col2:
-                svg_data, svg_src = get_diagram(st.session_state.code, "svg")
+                svg_data, _ = get_diagram(st.session_state.code, "svg")
                 if svg_data:
                     st.download_button(
                         "📄 SVG ダウンロード",
@@ -658,12 +653,10 @@ with col_right:
                         use_container_width=True,
                     )
 
-            # PlantUML URLも表示
             with st.expander("🔗 共有URL（plantuml.com）"):
                 url = plantuml_url(st.session_state.code, "png")
                 st.code(url, language=None)
                 st.markdown(f"[ブラウザで開く ↗]({url})")
-
         else:
             st.error(
                 "⚠️ ダイアグラムを生成できませんでした。\n\n"
@@ -676,11 +669,9 @@ with col_right:
 
     elif not st.session_state.code.strip():
         st.info("← コードを入力してください")
-
     else:
-        st.info("← コードを編集すると自動でプレビューが更新されます\n（または「▶ 更新」ボタンを押してください）")
+        st.info("← コードを編集後、**Ctrl+Enter** でプレビューへ反映されます\n（または「▶ 更新」ボタンを押してください）")
 
-    # jar がない場合の案内
     if not find_jar():
         with st.expander("ℹ️ ローカルレンダリングについて"):
             st.markdown("""
